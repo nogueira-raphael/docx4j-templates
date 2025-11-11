@@ -1,0 +1,73 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?><invoice>
+    
+    <date>2019-01-15</date>
+    <customer>
+      <name>John Doe</name>
+    </customer>
+    <items>
+        <item>
+            <name>Fresh Salmon Fillet</name>
+            <price>$18.90</price>
+        </item>
+        <item>
+            <name>Organic Avocados (Pack of 6)</name>
+            <price>$7.50</price>
+        </item>
+        <item>
+            <name>Premium Olive Oil (1L)</name>
+            <price>$22.00</price>
+        </item>
+        <item>
+            <name>Brazilian Coffee Beans (1kg)</name>
+            <price>$15.75</price>
+        </item>
+        <item>
+            <name>Whole Milk (2 Gallons)</name>
+            <price>$9.30</price>
+        </item>
+        <item>
+            <name>Imported Parmesan Cheese</name>
+            <price>$13.99</price>
+        </item>
+        <item>
+            <name>Beef Ribeye Steak (1kg)</name>
+            <price>$62.40</price>
+        </item>
+        <item>
+            <name>LED Smart TV 55"</name>
+            <price>$448.00</price>
+        </item>
+        <item>
+            <name>Apple iPad Mini</name>
+            <price>$499.00</price>
+        </item>
+        <item>
+            <name>Gaming Mouse</name>
+            <price>$79.90</price>
+        </item>
+        <item>
+            <name>Wireless Bluetooth Headphones</name>
+            <price>$120.70</price>
+        </item>
+        <item>
+            <name>Apple AirPods Pro</name>
+            <price>$199.99</price>
+        </item>
+        <item>
+            <name>USB-C Charging Cable</name>
+            <price>$12.49</price>
+        </item>
+        <item>
+            <name>Handmade Wooden Dining Table</name>
+            <price>$979.00</price>
+        </item>
+        <item>
+            <name>Gaming Laptop</name>
+            <price>$1599.00</price>
+        </item>
+    </items>
+    <misc>
+        <includeBankDetails>true</includeBankDetails>
+        <wantspam>false</wantspam>
+    </misc>
+</invoice>

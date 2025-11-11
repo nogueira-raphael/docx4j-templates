@@ -1,163 +1,91 @@
 package com.footer.docx;
 
-import org.docx4j.jaxb.Context;
+import org.docx4j.Docx4J;
+import org.docx4j.XmlUtils;
+import org.docx4j.model.datastorage.BindingHandler;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
-import org.docx4j.openpackaging.parts.WordprocessingML.FooterPart;
-import org.docx4j.relationships.Relationship;
-import org.docx4j.wml.*;
+import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
+import org.w3c.dom.Document;
+
+import javax.xml.transform.Source;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamSource;
 
 import java.io.File;
-import java.math.BigInteger;
-
-import javax.xml.bind.JAXBElement;
+import java.io.FileInputStream;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        WordprocessingMLPackage pkg = WordprocessingMLPackage.createPackage();
-        ObjectFactory factory = Context.getWmlObjectFactory();
 
-        FooterPart footerPart = new FooterPart();
-        footerPart.setPackage(pkg);
+        String path = "D:/Projects/Java/docx-footer-demo/src/main/java/com/footer/docx/";
 
-        Ftr ftr = createFooter(factory);
-        footerPart.setJaxbElement(ftr);
+        String inputDocx = path + "invoice.docx";
+        String inputData = path + "invoice-data.xml";
+        String outputDocx = path + "generated_document.docx";
 
-        Relationship rel = pkg.getMainDocumentPart().addTargetPart(footerPart);
+        // Explicitly configure Xalan as the TransformerFactory implementation
+        System.setProperty(
+                "javax.xml.transform.TransformerFactory",
+                "org.docx4j.org.apache.xalan.processor.TransformerFactoryImpl"
+        );
 
-        SectPr sectPr = factory.createSectPr();
-        FooterReference footerRef = factory.createFooterReference();
-        footerRef.setType(HdrFtrRef.DEFAULT);
-        footerRef.setId(rel.getId());
-        sectPr.getEGHdrFtrReferences().add(footerRef);
+        // Load the DOCX template
+        WordprocessingMLPackage pkg = Docx4J.load(new File(inputDocx));
 
-        pkg.getMainDocumentPart().addObject(sectPr);
+        // debug purpose
+        // org.docx4j.wml.Document jaxbEl = pkg.getMainDocumentPart().getJaxbElement();
+        // String pretty = XmlUtils.marshaltoString(
+        //         jaxbEl,
+        //         true  // pretty print
+        // );
+        // System.out.println(pretty);
 
-        // generating 3 pages document
-        for (int i = 1; i <= 3; i++) {
-            for (int j = 1; j < 15 + 1; j++) {
-                pkg.getMainDocumentPart().addParagraphOfText(
-                      "Line " + j + " of page " + i + " - test content for page break."
-                );
-            }
+        // Load the XML data document
+        FileInputStream fis = new FileInputStream(inputData);
+        Document xmlDocument = XmlUtils.getNewDocumentBuilder().parse(fis);
 
-            if (i < 3) {
-                P p = factory.createP();
-                Br breakPage = factory.createBr();
-                breakPage.setType(STBrType.PAGE);
-                p.getContent().add(breakPage);
-                pkg.getMainDocumentPart().addObject(p);
-            }
-        }
+        // Configure how hyperlinks inside content controls are generated (optional)
+        BindingHandler.getHyperlinkResolver().setHyperlinkStyle("Hyperlink");
 
-        File out = new File("document.docx");
-        pkg.save(out);
-        System.out.println("Document saved: " + out.getAbsolutePath());
-    }
+        // Perform OpenDoPE XML binding:
+        // FLAG_BIND_INSERT_XML = inject the XML
+        // FLAG_BIND_BIND_XML   = populate content controls
+        System.out.println("Applying XML data binding...");
+        Docx4J.bind(
+                pkg,
+                xmlDocument,
+                Docx4J.FLAG_BIND_INSERT_XML | Docx4J.FLAG_BIND_BIND_XML
+        );
 
-    private static Ftr createFooter(ObjectFactory factory) {
-        Ftr ftr = factory.createFtr();
-        Tbl tbl = factory.createTbl();
+        // Extract the main document part (document.xml)
+        MainDocumentPart mdp = pkg.getMainDocumentPart();
 
-        TblPr tblPr = factory.createTblPr();
-        TblWidth tblW = factory.createTblWidth();
-        tblW.setType("pct");
-        tblW.setW(BigInteger.valueOf(5000));
-        tblPr.setTblW(tblW);
-        tbl.setTblPr(tblPr);
+        // Convert it into a W3C DOM Document so XSLT can be applied
+        org.w3c.dom.Document wordXmlAsDom =
+                XmlUtils.marshaltoW3CDomDocument(mdp.getJaxbElement());
 
-        Tr tr = factory.createTr();
+        // Load and compile the XSLT transformation
+        Source xsltSource = new StreamSource(new File(path + "XsltFinisherInvoice.xslt"));
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer transformer = tf.newTransformer(xsltSource);
 
-        Tc tcLeft = factory.createTc();
-        tcLeft.setTcPr(makeCellWidth(factory, 1650));
-        tcLeft.getContent().add(factory.createP());
-        tr.getContent().add(tcLeft);
+        // Transform the document XML
+        DOMResult transformedResult = new DOMResult();
+        transformer.transform(new DOMSource(wordXmlAsDom), transformedResult);
 
-        Tc tcCenter = factory.createTc();
-        tcCenter.setTcPr(makeCellWidth(factory, 1700));
+        // Replace the document contents with the transformed version
+        org.w3c.dom.Document transformedDom =
+                (org.w3c.dom.Document) transformedResult.getNode();
+        mdp.setContents(
+                mdp.unmarshal(transformedDom.getDocumentElement())
+        );
 
-        P pCenter = factory.createP();
-        PPr pPrCenter = factory.createPPr();
-        Jc jcCenter = factory.createJc();
-        jcCenter.setVal(JcEnumeration.CENTER);
-        pPrCenter.setJc(jcCenter);
-        pCenter.setPPr(pPrCenter);
+        // Save to a new DOCX file
+        Docx4J.save(pkg, new File(outputDocx), Docx4J.FLAG_NONE);
 
-        pCenter.getContent().add(runText(factory, "My Custom Footer"));
-        tcCenter.getContent().add(pCenter);
-        tr.getContent().add(tcCenter);
-
-        Tc tcRight = factory.createTc();
-        tcRight.setTcPr(makeCellWidth(factory, 1650));
-
-        P pRight = factory.createP();
-        PPr pprRight = factory.createPPr();
-        Jc jcRight = factory.createJc();
-        jcRight.setVal(JcEnumeration.RIGHT);
-        pprRight.setJc(jcRight);
-        pRight.setPPr(pprRight);
-
-        pRight.getContent().add(runText(factory, "Page\u00A0"));
-        addPageField(factory, pRight);
-
-        tcRight.getContent().add(pRight);
-        tr.getContent().add(tcRight);
-
-        tbl.getContent().add(tr);
-        ftr.getContent().add(tbl);
-
-        return ftr;
-    }
-
-    private static TcPr makeCellWidth(ObjectFactory factory, int pct50ths) {
-        TcPr tcPr = factory.createTcPr();
-        TblWidth w = factory.createTblWidth();
-        w.setType("pct");
-        w.setW(BigInteger.valueOf(pct50ths));
-        tcPr.setTcW(w);
-        return tcPr;
-    }
-
-    private static R runText(ObjectFactory factory, String value) {
-        R r = factory.createR();
-        Text t = factory.createText();
-        t.setSpace("preserve");
-        t.setValue(value);
-        r.getContent().add(t);
-        return r;
-    }
-
-    private static void addPageField(ObjectFactory factory, P p) {
-        R rBegin = factory.createR();
-        FldChar begin = factory.createFldChar();
-        begin.setFldCharType(STFldCharType.BEGIN);
-        rBegin.getContent().add(begin);
-
-        R rInstr = factory.createR();
-        Text instrText = factory.createText();
-        instrText.setSpace("preserve");
-        instrText.setValue(" PAGE ");
-        JAXBElement<Text> wrapped = factory.createRInstrText(instrText);
-        rInstr.getContent().add(wrapped);
-
-        R rSep = factory.createR();
-        FldChar sep = factory.createFldChar();
-        sep.setFldCharType(STFldCharType.SEPARATE);
-        rSep.getContent().add(sep);
-
-        R rVal = factory.createR();
-        Text t = factory.createText();
-        t.setValue("1");
-        rVal.getContent().add(t);
-
-        R rEnd = factory.createR();
-        FldChar end = factory.createFldChar();
-        end.setFldCharType(STFldCharType.END);
-        rEnd.getContent().add(end);
-
-        p.getContent().add(rBegin);
-        p.getContent().add(rInstr);
-        p.getContent().add(rSep);
-        p.getContent().add(rVal);
-        p.getContent().add(rEnd);
+        System.out.println("Document successfully transformed using XSLT and saved to: " + outputDocx);
     }
 }
